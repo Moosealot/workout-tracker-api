@@ -1,51 +1,55 @@
-from flask import Flask
+import os
+
+from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 
-from models import *
+from schemas import (
+    WorkoutSchema,
+    ExerciseSchema,
+    WorkoutExerciseSchema
+)
+
+from models import db, Workout, Exercise, WorkoutExercise
 
 app = Flask(__name__)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "app.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
-
 migrate = Migrate(app, db)
 
-duration_minutes = db.Column(
-    db.Integer,
-    nullable=False
-)
+workout_schema = WorkoutSchema()
+workouts_schema = WorkoutSchema(many=True)
 
-name = db.Column(
-    db.String(100),
-    nullable=False,
-    unique=True
-)
+exercise_schema = ExerciseSchema()
+exercises_schema = ExerciseSchema(many=True)
 
-@validates("duration_minutes")
-def validate_duration(self, key, value):
+workout_exercise_schema = WorkoutExerciseSchema()
+workout_exercises_schema = WorkoutExerciseSchema(many=True)
 
-    if value <= 0:
-        raise ValueError("Duration must be positive.")
 
-    return value
+@app.route("/workouts", methods=["GET"])
+def get_workouts():
+    workouts = Workout.query.all()
+    return jsonify(workouts_schema.dump(workouts))
 
-@validates("name")
-def validate_name(self, key, value):
 
-    if len(value) < 3:
-        raise ValueError("Exercise name too short.")
+@app.route("/workouts", methods=["POST"])
+def create_workout():
+    data = request.get_json()
 
-    return value
+    validated = workout_schema.load(data)
 
-@validates("reps")
-def validate_reps(self, key, value):
+    workout = Workout(**validated)
 
-    if value is not None and value < 0:
-        raise ValueError("Reps cannot be negative.")
+    db.session.add(workout)
+    db.session.commit()
 
-    return value
+    return workout_schema.dump(workout), 201
+
 
 if __name__ == "__main__":
     app.run(port=5555, debug=True)
